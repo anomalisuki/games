@@ -547,7 +547,7 @@ function enginestep() {
 	ctx.font = "14px arial";
 	ctx.textAlign = "center";
 	ctx.textBaseline = "middle";
-	ctx.fillText("Coronavirus Shooting Game, Designed & Developed by Faisal Jawed", stage.w / 2, stage.h - 20);
+	ctx.fillText("Coronavirus Shooting Game, Designed & Developed by Vidzz DEV", stage.w / 2, stage.h - 20);
 }
 
 var ox = 0;
@@ -619,7 +619,7 @@ function animated() {
 
 	nfcount++;
 	ctx.fillStyle = '#00ffff';
-	ctx.font = "12px arial";
+	ctx.font = "24px arial";
 	ctx.textAlign = "left";
 	ctx.fillText("FPS: " + Math.floor(fps), 10, stage.h - 20);
 }
