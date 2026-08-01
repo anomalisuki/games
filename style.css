@@ -13,19 +13,23 @@ body {
   justify-content: center;
   align-items: center;
   overflow-x: hidden;
+  padding: 12px;
 }
 
 .app-container {
   width: 100%;
   max-width: 1280px;
-  padding: 16px;
   display: flex;
   flex-direction: column;
+  align-items: center; /* Memaksa semua elemen anak rata tengah */
+  justify-content: center;
   gap: 16px;
+  margin: auto;
 }
 
 /* Header UI */
 .game-header {
+  width: 100%;
   background: rgba(10, 25, 47, 0.6);
   border: 1px solid rgba(0, 242, 255, 0.15);
   border-radius: 12px;
@@ -131,4 +135,5 @@ canvas {
   border: 1px solid rgba(0, 242, 255, 0.1);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   display: block;
+  margin: 0 auto !important; /* Menghapus margin-left kustom dari pexresize */
 }
