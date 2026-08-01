@@ -619,7 +619,7 @@ function animated() {
 
 	nfcount++;
 	ctx.fillStyle = '#00ffff';
-	ctx.font = "24px arial";
+	ctx.font = "36px arial";
 	ctx.textAlign = "left";
 	ctx.fillText("FPS: " + Math.floor(fps), 10, stage.h - 20);
 }
