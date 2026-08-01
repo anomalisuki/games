@@ -4,6 +4,8 @@ var stage = {
 	h: 720
 }
 
+var isPaused = false;
+
 var _pexcanvas = document.getElementById("canvas");
 _pexcanvas.width = stage.w;
 _pexcanvas.height = stage.h;
@@ -125,6 +127,7 @@ for (var i = 0; i < 200; i++) {
 }
 
 function enginestep() {
+  if (isPaused) return;
 	steptime = Date.now();
 	ctx.clearRect(0, 0, stage.w, stage.h);
 	ctx.fillStyle = "#ffffff";
@@ -544,95 +547,116 @@ function enginestep() {
 	ctx.stroke();
 
 	ctx.fillStyle = '#004444';
-	ctx.font = "14px arial";
+	ctx.font = "19px arial";
 	ctx.textAlign = "center";
 	ctx.textBaseline = "middle";
-	ctx.fillText("Coronavirus Shooting Game, Designed & Developed by Vidzz DEV", stage.w / 2, stage.h - 20);
+	ctx.fillText("Coronavirus Shooting Game, Designed & Developed by Vidzz dev", stage.w / 2, stage.h - 20);
 }
 
 var ox = 0;
 var oy = 0;
 
+// ------------------------------------------------------------------------------- events
 function mousestart(e) {
-	mxpos = (e.pageX - loffset) * scale;
-	mypos = (e.pageY - toffset) * scale;
-	pointer.x = mxpos;
-	pointer.y = mypos;
+	updatePointer(e);
 }
 
 function mousemove(e) {
-	mxpos = (e.pageX - loffset) * scale;
-	mypos = (e.pageY - toffset) * scale;
-	pointer.x = mxpos;
-	pointer.y = mypos;
-	ox = mxpos;
+	updatePointer(e);
 }
 
 function mouseend(e) {}
 
-window.addEventListener('mousedown', function(e) { mousestart(e); }, false);
-window.addEventListener('mousemove', function(e) { mousemove(e); }, false);
-window.addEventListener('mouseup', function(e) { mouseend(e); }, false);
-window.addEventListener('touchstart', function(e) { e.preventDefault(); mousestart(e.touches[0]); }, false);
-window.addEventListener('touchmove', function(e) { e.preventDefault(); mousemove(e.touches[0]); }, false);
-window.addEventListener('touchend', function(e) { e.preventDefault(); mouseend(e.touches[0]); }, false);
-
-function _pexresize() {
-	var cw = window.innerWidth;
-	var ch = window.innerHeight;
-	if (cw <= ch * stage.w / stage.h) {
-		portrait = true;
-		scale = stage.w / cw;
-		loffset = 0;
-		toffset = Math.floor(ch - (cw * stage.h / stage.w)) / 2;
-		_pexcanvas.style.width = cw + "px";
-		_pexcanvas.style.height = Math.floor(cw * stage.h / stage.w) + "px";
-	} else {
-		scale = stage.h / ch;
-		portrait = false;
-		loffset = Math.floor(cw - (ch * stage.w / stage.h)) / 2;
-		toffset = 0;
-		_pexcanvas.style.height = ch + "px";
-		_pexcanvas.style.width = Math.floor(ch * stage.w / stage.h) + "px";
+// Fungsi utama yang menghitung posisi kursor/sentuhan secara presisi
+function updatePointer(e) {
+	var rect = _pexcanvas.getBoundingClientRect();
+	var clientX = e.clientX;
+	var clientY = e.clientY;
+	
+	if (e.touches && e.touches.length > 0) {
+		clientX = e.touches[0].clientX;
+		clientY = e.touches[0].clientY;
 	}
-	_pexcanvas.style.marginLeft = loffset + "px";
-	_pexcanvas.style.marginTop = toffset + "px";
+
+	// Menghitung rasio relatif kursor terhadap ukuran canvas di layar
+	var relativeX = (clientX - rect.left) / rect.width;
+	var relativeY = (clientY - rect.top) / rect.height;
+
+	// Mengonversi rasio ke koordinat asli canvas (1280x720)
+	pointer.x = relativeX * stage.w;
+	pointer.y = relativeY * stage.h;
 }
 
-window.requestAnimFrame = (function() {
-	return window.requestAnimationFrame ||
-		window.webkitRequestAnimationFrame ||
-		window.mozRequestAnimationFrame ||
-		window.oRequestAnimationFrame ||
-		window.msRequestAnimationFrame ||
-		function(callback) {
-			window.setTimeout(callback, 1000 / 60);
-		};
-})();
+window.addEventListener('mousedown', mousestart, false);
+window.addEventListener('mousemove', mousemove, false);
+window.addEventListener('mouseup', mouseend, false);
 
-var fps = 60;
+window.addEventListener('touchstart', function(e) {
+	e.preventDefault();
+	mousestart(e);
+}, { passive: false });
+
+window.addEventListener('touchmove', function(e) {
+	e.preventDefault();
+	mousemove(e);
+}, { passive: false });
+
+window.addEventListener('touchend', function(e) {
+	e.preventDefault();
+	mouseend(e);
+}, { passive: false });
+
+// ------------------------------------------------------------------------ stager
+function _pexresize() {
+	_pexcanvas.style.marginLeft = "auto";
+	_pexcanvas.style.marginRight = "auto";
+	_pexcanvas.style.marginTop = "0px";
+}
+
+window.requestAnimFrame = (function(){
+	return  window.requestAnimationFrame       ||
+	window.webkitRequestAnimationFrame ||
+	window.mozRequestAnimationFrame    ||
+	window.oRequestAnimationFrame      ||
+	window.msRequestAnimationFrame     ||
+	function( callback ){
+		window.setTimeout(callback, 1000 / 60);
+	};})();
+
+var fps = 120;
 var nfcount = 0;
 
 function animated() {
 	requestAnimFrame(animated);
 	enginestep();
 
-	nfcount++;
-	ctx.fillStyle = '#00ffff';
-	ctx.font = "36px arial";
-	ctx.textAlign = "left";
-	ctx.fillText("FPS: " + Math.floor(fps), 10, stage.h - 20);
+   	nfcount++;
+    ctx.fillStyle='#00ffff';
+    ctx.font = "24px arial";
+    ctx.textAlign = "left"; 
+    ctx.fillText("FPS: "+Math.floor(fps),10,stage.h-20);
 }
+
+function openModal() {
+	isPaused = true;
+	document.getElementById('modal-info').classList.add('active');
+}
+
+function closeModal() {
+	isPaused = false;
+	document.getElementById('modal-info').classList.remove('active');
+}
+
 
 function countfps() {
 	fps = nfcount;
 	nfcount = 0;
 }
-setInterval(countfps, 1000);
+setInterval(countfps,1000);
 
-// Pemicu inisialisasi yang aman untuk Webview/Acode
 window.addEventListener('load', function() {
 	_pexresize();
 	animated();
 });
 window.addEventListener('resize', _pexresize);
+
