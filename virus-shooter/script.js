@@ -1,0 +1,799 @@
+"use strict";
+
+var stage = {
+	w: 1280,
+	h: 720
+};
+
+var isPaused = false;
+var isGameStarted = false;
+
+// ------------------------------------------------------------------------------- Web Audio API System
+var audioCtx = null;
+var soundBuffer = null;
+
+var lastShootTime = 0;
+var shootDelay = 85;
+
+function loadSound() {
+	var request = new XMLHttpRequest();
+	request.open('GET', 'sound.mp3', true);
+	request.responseType = 'arraybuffer';
+
+	request.onload = function() {
+		if (audioCtx) {
+			audioCtx.decodeAudioData(request.response, function(buffer) {
+				soundBuffer = buffer;
+			});
+		}
+	};
+	request.send();
+}
+
+// Fungsi Toggle Fullscreen dengan Pembukaan Orientasi Horizontal (Landscape)
+function toggleCanvasFullscreen() {
+	var wrapperElem = document.querySelector(".canvas-wrapper") || document.getElementById("canvas");
+	if (!wrapperElem) return;
+
+	if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement) {
+		if (wrapperElem.requestFullscreen) {
+			wrapperElem.requestFullscreen().then(function() {
+				if (screen.orientation && screen.orientation.lock) {
+					screen.orientation.lock('landscape').catch(function(err) {});
+				}
+			}).catch(function(err) {});
+		} else if (wrapperElem.webkitRequestFullscreen) {
+			wrapperElem.webkitRequestFullscreen();
+		} else if (wrapperElem.msRequestFullscreen) {
+			wrapperElem.msRequestFullscreen();
+		}
+	} else {
+		exitCanvasFullscreen();
+	}
+}
+
+// Fungsi khusus Keluar dari Mode Fullscreen
+function exitCanvasFullscreen() {
+	if (document.exitFullscreen) {
+		document.exitFullscreen();
+	} else if (document.webkitExitFullscreen) {
+		document.webkitExitFullscreen();
+	} else if (document.msExitFullscreen) {
+		document.msExitFullscreen();
+	}
+	
+	if (screen.orientation && screen.orientation.unlock) {
+		screen.orientation.unlock();
+	}
+}
+
+function startAudioAndGame() {
+	if (!audioCtx) {
+		audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+		loadSound();
+	}
+	if (audioCtx && audioCtx.state === 'suspended') {
+		audioCtx.resume();
+	}
+	
+	var overlay = document.getElementById('start-overlay');
+	if (overlay) {
+		overlay.style.display = 'none';
+	}
+	
+	isGameStarted = true;
+}
+
+function playShootSound() {
+	if (typeof isMuted !== 'undefined' && isMuted) return;
+	if (audioCtx && soundBuffer) {
+		var source = audioCtx.createBufferSource();
+		source.buffer = soundBuffer;
+		source.connect(audioCtx.destination);
+		source.start(0);
+	}
+}
+
+var _pexcanvas = document.getElementById("canvas");
+_pexcanvas.width = stage.w;
+_pexcanvas.height = stage.h;
+var ctx = _pexcanvas.getContext("2d");
+
+var pointer = {
+	x: stage.w / 2,
+	y: stage.h / 4
+};
+
+var scale = 1;
+var portrait = true;
+var loffset = 0;
+var toffset = 0;
+var mxpos = 0;
+var mypos = 0;
+
+var againprog = 0;
+var healthprog = 0;
+
+function newGame() {
+	score = 0;
+	health = 100;
+	enemies = [];
+	enemies.push(new Enemy());
+	enemies.push(new Enemy());
+	enemies.push(new Enemy());
+	againprog = 0;
+}
+
+function drawHeart(x, y, w) {
+	ctx.beginPath();
+	ctx.arc(x - w / 4, y, w / 4, 0.75 * Math.PI, 0);
+	ctx.arc(x + w / 4, y, w / 4, 1 * Math.PI, 2.25 * Math.PI);
+	ctx.lineTo(x, y + w / 1.5);
+	ctx.closePath();
+	ctx.fill();
+}
+
+var Cannon = function(x, y, tx, ty) {
+	this.x = x;
+	this.y = y;
+	this.tx = tx;
+	this.ty = ty;
+	this.r = 10;
+};
+
+var cannons = [];
+var gameover = false;
+
+cannons.push(new Cannon(stage.w, stage.h, stage.w / 2, stage.h / 2));
+
+var firetm = 0;
+var fireact = true;
+var health = 100;
+var score = 0;
+
+var arm = { x: stage.w, y: stage.h };
+var arm2 = { x: 0, y: stage.h };
+var danger = false;
+var dangera = 0;
+
+var Enemy = function() {
+	this.x = stage.w / 2;
+	this.y = stage.h / 2;
+	this.r = 10;
+	this.tx = Math.floor(Math.random() * stage.w);
+	this.ty = Math.floor(Math.random() * stage.h);
+	this.des = false;
+	this.eyeX = 0.4;
+	this.eyeY = 0.25;
+	this.eyeR = 0.25;
+	this.sp = 50;
+	this.spl = 1.4;
+	this.op = 1;
+	this.danger = false;
+	this.nuked = false;
+};
+
+var enemies = [];
+enemies.push(new Enemy());
+enemies.push(new Enemy());
+enemies.push(new Enemy());
+
+var entm = 0;
+var ga = 0;
+var steptime = 0;
+
+var Star = function() {
+	this.a = Math.random() * Math.PI * 2;
+	this.v = 3 + Math.random() * 5;
+	this.x = stage.w / 2;
+	this.y = stage.h / 2;
+	this.r = 0.2;
+};
+
+var Power = function() {
+	this.type = Math.floor(Math.random() * 2) + 1;
+	this.a = Math.random() * Math.PI * 2;
+	this.v = 3 + Math.random() * 5;
+	this.x = stage.w / 2;
+	this.y = stage.h / 2;
+	this.r = 0.2;
+	this.dis = false;
+	this.op = 1;
+};
+
+var powers = [];
+var powertm = 0;
+var powermax = Math.random() * 800 + 300;
+var stars = [];
+
+for (var i = 0; i < 200; i++) {
+	stars[i] = new Star();
+	var st = stars[i];
+	var move = Math.random() * 400;
+	st.x += Math.sin(st.a) * move;
+	st.y += Math.cos(st.a) * move;
+}
+
+function enginestep() {
+	steptime = Date.now();
+	ctx.clearRect(0, 0, stage.w, stage.h);
+	ctx.fillStyle = "#ffffff";
+
+	for (var i = 0; i < stars.length; i++) {
+		var st = stars[i];
+		if (isGameStarted && !isPaused) {
+			st.x += Math.sin(st.a) * st.v;
+			st.y += Math.cos(st.a) * st.v;
+			st.r += st.v / 200;
+		}
+
+		ctx.beginPath();
+		ctx.arc(st.x, st.y, st.r, 2 * Math.PI, 0);
+		ctx.fill();
+
+		if (st.x > stage.w || st.x < 0 || st.y < 0 || st.y > stage.h) {
+			stars[i] = new Star();
+		}
+	}
+
+	if (!isGameStarted || isPaused) {
+		ctx.fillStyle = '#004444';
+		ctx.font = "19px arial";
+		ctx.textAlign = "center";
+		ctx.textBaseline = "middle";
+		ctx.fillText("Virus Shooting Game, Designed & Developed by Vidzz dev", stage.w / 2, stage.h - 20);
+		return;
+	}
+
+	if (!gameover) {
+		danger = false;
+		powertm++;
+		if (powertm > powermax) {
+			powers.push(new Power());
+			powertm = 0;
+			powermax = Math.random() * 1200 + 600;
+		}
+
+		for (var i = 0; i < powers.length; i++) {
+			var st = powers[i];
+			if (!st.des) {
+				st.x += Math.sin(st.a) * st.v / 1.5;
+				st.y += Math.cos(st.a) * st.v / 1.5;
+				st.r += st.v / 15;
+			} else {
+				st.r *= 1.1;
+				if (st.type == 1) {
+					st.op += (0 - st.op) / 10;
+				} else {
+					st.op += (0 - st.op) / 20;
+				}
+				st.x += (stage.w / 2 - st.x) / 10;
+				st.y += (stage.h / 2 - st.y) / 10;
+			}
+
+			if (st.type == 1) {
+				ctx.fillStyle = "rgba(255,0,0," + st.op + ")";
+				drawHeart(st.x, st.y - st.r / 4, st.r * 2);
+			} else {
+				ctx.fillStyle = "rgba(255,255,0," + st.op + ")";
+				ctx.strokeStyle = "rgba(255,255,0," + st.op + ")";
+				ctx.lineWidth = st.r / 10;
+				ctx.beginPath();
+				ctx.arc(st.x, st.y, st.r, 2 * Math.PI, 0);
+				ctx.stroke();
+
+				ctx.beginPath();
+				ctx.arc(st.x, st.y, st.r * 0.15, 2 * Math.PI, 0);
+				ctx.fill();
+
+				ctx.beginPath();
+				ctx.arc(st.x, st.y, st.r * 0.85, 1.67 * Math.PI, 2 * Math.PI);
+				ctx.arc(st.x, st.y, st.r * 0.25, 2 * Math.PI, 1.67 * Math.PI, true);
+				ctx.closePath();
+				ctx.fill();
+
+				ctx.beginPath();
+				ctx.arc(st.x, st.y, st.r * 0.85, 3 * Math.PI, 3.33 * Math.PI);
+				ctx.arc(st.x, st.y, st.r * 0.25, 3.33 * Math.PI, 3 * Math.PI, true);
+				ctx.closePath();
+				ctx.fill();
+
+				ctx.beginPath();
+				ctx.arc(st.x, st.y, st.r * 0.85, 2.33 * Math.PI, 2.67 * Math.PI);
+				ctx.arc(st.x, st.y, st.r * 0.25, 2.67 * Math.PI, 2.33 * Math.PI, true);
+				ctx.lineTo(st.x, st.y);
+				ctx.closePath();
+				ctx.fill();
+			}
+
+			if (st.x > stage.w || st.x < 0 || st.y < 0 || st.y > stage.h || st.r > stage.w / 2) {
+				powers.splice(i, 1);
+				if (st.type == 2 && st.r > stage.w / 2) {
+					for (var e = 0; e < enemies.length; e++) {
+						enemies[e].des = true;
+						enemies[e].nuked = true;
+					}
+				}
+				i--;
+			}
+		}
+
+		entm++;
+		if (enemies.length < 10 && entm > 300) {
+			entm = 0;
+			enemies.push(new Enemy());
+		}
+
+		ctx.lineWidth = 2;
+		for (var i = 0; i < enemies.length; i++) {
+			var en = enemies[i];
+			if (!en.danger) {
+				ctx.strokeStyle = "rgba(0,255,255," + en.op * 2 + ")";
+			} else {
+				health -= 0.01;
+				ctx.strokeStyle = "rgba(255,0,0," + en.op * 2 + ")";
+				danger = true;
+			}
+
+			if (!en.des) {
+				if (en.danger) {
+					var randx = Math.floor(Math.random() * 4) - 2;
+					var randy = Math.floor(Math.random() * 4) - 2;
+					en.x = en.tx + randx;
+					en.y = en.ty + randy;
+				} else {
+					en.x += (en.tx - en.x) / 100;
+					en.y += (en.ty - en.y) / 100;
+				}
+
+				en.r += (50 - en.r) / 100;
+				if (Math.abs(50 - en.r) < 2 && !en.danger) {
+					en.tx = en.x;
+					en.ty = en.y;
+					en.danger = true;
+				}
+				ctx.beginPath();
+				ctx.arc(en.x - en.r * en.eyeX, en.y - en.r * en.eyeY, en.r * en.eyeR, 0, 2 * Math.PI);
+				ctx.stroke();
+				ctx.beginPath();
+				ctx.arc(en.x + en.r * en.eyeX, en.y - en.r * en.eyeY, en.r * en.eyeR, 0, 2 * Math.PI);
+				ctx.stroke();
+
+				ctx.beginPath();
+				ctx.arc(en.x, en.y + en.r / 4, en.r / 3, 2 * Math.PI, Math.PI);
+				ctx.stroke();
+
+				ctx.beginPath();
+				ctx.arc(en.x, en.y, en.r, 0, 2 * Math.PI);
+				ctx.stroke();
+			} else {
+				en.eyeR += (0.5 - en.eyeR) / 5;
+				en.op += (0 - en.op) / 5;
+				en.r += (100 - en.r) / 20;
+				en.spl += (2.5 - en.spl) / 5;
+				ctx.beginPath();
+				ctx.arc(en.x - en.r * en.eyeX, en.y - en.r * en.eyeY, en.r * en.eyeR, 0, 2 * Math.PI);
+				ctx.stroke();
+				ctx.beginPath();
+				ctx.arc(en.x + en.r * en.eyeX, en.y - en.r * en.eyeY, en.r * en.eyeR, 0, 2 * Math.PI);
+				ctx.stroke();
+				ctx.beginPath();
+				ctx.arc(en.x, en.y + en.r / 2, en.r * en.eyeR, Math.PI, 2 * Math.PI);
+				ctx.stroke();
+
+				ctx.beginPath();
+				ctx.arc(en.x, en.y, en.r, 0, 2 * Math.PI);
+				ctx.stroke();
+			}
+
+			for (var s = 0; s < 12; s++) {
+				var a = (Math.PI * 2 / 12) * s + ga;
+				ctx.beginPath();
+				ctx.moveTo(en.x + Math.sin(a) * en.r, en.y + Math.cos(a) * en.r);
+				ctx.lineTo(en.x + Math.sin(a) * en.r * 1.2, en.y + Math.cos(a) * en.r * 1.2);
+				ctx.lineTo(en.x + Math.sin(a + Math.PI / en.sp) * en.r * en.spl, en.y + Math.cos(a + Math.PI / en.sp) * en.r * en.spl);
+				ctx.lineTo(en.x + Math.sin(a - Math.PI / en.sp) * en.r * en.spl, en.y + Math.cos(a - Math.PI / en.sp) * en.r * en.spl);
+				ctx.lineTo(en.x + Math.sin(a) * en.r * 1.2, en.y + Math.cos(a) * en.r * 1.2);
+				ctx.stroke();
+			}
+
+			if (Math.abs(0.5 - en.eyeR) < 0.01) {
+				var rand = Math.floor(Math.random() * 2);
+				if (enemies[i].nuked && rand == 1) {
+					enemies.splice(i, 1);
+				} else {
+					enemies[i] = new Enemy();
+				}
+			}
+		}
+
+		if (danger) {
+			dangera += 0.05 + (100 - health) / 1000;
+			if (dangera >= Math.PI) {
+				dangera = 0;
+			}
+			ctx.fillStyle = 'rgba(255,0,0,' + (1 - Math.sin(dangera)) / 4 + ')';
+			ctx.fillRect(0, 0, stage.w, stage.h);
+			if (health < 10) {
+				ctx.fillStyle = 'rgba(255,255,0,' + (Math.sin(dangera)) + ')';
+				ctx.strokeStyle = 'rgba(255,255,0,' + (Math.sin(dangera)) + ')';
+				ctx.lineWidth = 10;
+				ctx.beginPath();
+				ctx.lineJoin = 'round';
+				ctx.moveTo(stage.w / 2, stage.h / 4);
+				ctx.lineTo(stage.w / 2 + stage.h / 7, stage.h / 2);
+				ctx.lineTo(stage.w / 2 - stage.h / 7, stage.h / 2);
+				ctx.closePath();
+				ctx.stroke();
+
+				ctx.font = "bold 130px arial";
+				ctx.textAlign = "center";
+				ctx.textBaseline = "middle";
+				ctx.fillText("!", stage.w / 2, stage.h / 2.5);
+
+				ctx.font = "bold 50px arial";
+				ctx.fillText("LOW HEALTH", stage.w / 2, stage.h * 0.6);
+			}
+		} else {
+			dangera = 0;
+		}
+
+		healthprog += (health - healthprog) / 5;
+		ctx.fillStyle = '#00ffff';
+		ctx.font = "30px arial";
+		ctx.textAlign = "left";
+		ctx.textBaseline = "middle";
+		ctx.fillText("Health: ", 20, 40);
+		ctx.fillText("Score: " + score, stage.w - 200, 40);
+
+		if (health > 30) {
+			ctx.fillStyle = 'rgba(0,255,255,0.8)';
+		} else {
+			ctx.fillStyle = 'rgba(255,0,0,0.8)';
+		}
+		ctx.lineWidth = 2;
+		ctx.fillRect(130, 25, healthprog * 3, 30);
+		ctx.strokeStyle = "#00ffff";
+		ctx.strokeRect(130, 25, 300, 30);
+
+		if (health < 0) {
+			gameover = true;
+		}
+	} else {
+		ctx.fillStyle = 'rgba(0,255,255,0.3)';
+		ctx.fillRect((stage.w - 220) / 2, stage.h * 0.65 - 25, againprog, 50);
+
+		ctx.fillStyle = '#00ffff';
+		ctx.font = "bold 130px arial";
+		ctx.textAlign = "center";
+		ctx.textBaseline = "middle";
+		ctx.fillText("GAME OVER", stage.w / 2, stage.h / 3);
+		ctx.font = "bold 50px arial";
+		ctx.fillText("SCORE: " + score, stage.w / 2, stage.h / 2);
+
+		ctx.font = "bold 30px arial";
+		ctx.fillText("PLAY AGAIN", stage.w / 2, stage.h * 0.65);
+		ctx.strokeRect((stage.w - 220) / 2, stage.h * 0.65 - 25, 220, 50);
+
+		againprog += (0 - againprog) / 50;
+	}
+
+	ctx.strokeStyle = "#00ffff";
+	ctx.fillStyle = "#00ffff";
+	ctx.lineWidth = 2;
+
+	if (fireact) {
+		firetm++;
+		if (firetm > 5) {
+			cannons.push(new Cannon(pointer.x + (stage.w - pointer.x) / 2.5, pointer.y + (stage.h - pointer.y) / 2.5, pointer.x, pointer.y));
+			cannons.push(new Cannon(pointer.x - (pointer.x) / 2.5, pointer.y + (stage.h - pointer.y) / 2.5, pointer.x, pointer.y));
+			firetm = 0;
+
+			var now = Date.now();
+			if (now - lastShootTime >= shootDelay) {
+				playShootSound();
+				lastShootTime = now;
+			}
+		}
+
+		arm.x = Math.floor(Math.random() * 50) - 25 + stage.w;
+		arm.y = Math.floor(Math.random() * 50) - 25 + stage.h;
+		arm2.x = Math.floor(Math.random() * 30) - 15;
+		arm2.y = Math.floor(Math.random() * 30) - 15 + stage.h;
+	} else {
+		arm.x = stage.w;
+		arm.y = stage.h;
+		arm2.x = 0;
+		arm2.y = stage.h;
+	}
+
+	for (var i = 0; i < cannons.length; i++) {
+		var can = cannons[i];
+		can.x += (can.tx - can.x) / 5;
+		can.y += (can.ty - can.y) / 5;
+		can.r += (0 - can.r) / 5;
+
+		ctx.beginPath();
+		ctx.arc(can.x, can.y, can.r, 0, 2 * Math.PI);
+		ctx.fill();
+
+		if (can.r < 2 && !gameover) {
+			for (var a = 0; a < enemies.length; a++) {
+				var en = enemies[a];
+				var dx = can.x - en.x;
+				var dy = can.y - en.y;
+				var dis = dx * dx + dy * dy;
+				if (dis < en.r * en.r) {
+					if (!enemies[a].des) {
+						enemies[a].des = true;
+						score += 10;
+					}
+				}
+			}
+		}
+
+		if (can.r < 1 && !gameover) {
+			for (var a = 0; a < powers.length; a++) {
+				var en = powers[a];
+				var dx = can.x - en.x;
+				var dy = can.y - en.y;
+				var dis = dx * dx + dy * dy;
+				if (dis < en.r * en.r) {
+					if (!en.des) {
+						powers[a].des = true;
+						if (en.type == 1) {
+							health = 100;
+						}
+					}
+				}
+			}
+		}
+
+		if (can.r < 1 && gameover) {
+			if (can.x > (stage.w - 220) / 2 && can.y > stage.h * 0.65 - 25 && can.x < (stage.w - 220) / 2 + 220 && can.y < stage.h * 0.65 - 25 + 50) {
+				againprog += 1;
+				if (againprog > 220) {
+					newGame();
+					gameover = false;
+				}
+			}
+		}
+
+		if (Math.abs(can.tx - can.x) < 1) {
+			cannons.splice(i, 1);
+		}
+	}
+
+	ctx.beginPath();
+	ctx.moveTo(pointer.x - 20, pointer.y);
+	ctx.lineTo(pointer.x + 20, pointer.y);
+	ctx.stroke();
+
+	ctx.beginPath();
+	ctx.moveTo(pointer.x, pointer.y - 20);
+	ctx.lineTo(pointer.x, pointer.y + 20);
+	ctx.stroke();
+
+	ctx.beginPath();
+	ctx.arc(pointer.x, pointer.y, 8, 0, 2 * Math.PI);
+	ctx.stroke();
+
+	ctx.beginPath();
+	ctx.moveTo(pointer.x + (arm.x - pointer.x) / 3, pointer.y + (arm.y - pointer.y) / 3 + 10);
+	ctx.lineTo(pointer.x + (arm.x - pointer.x) / 2.5, pointer.y + (arm.y - pointer.y) / 2.5 + 10);
+	ctx.lineTo(pointer.x + (arm.x - pointer.x) / 2, pointer.y + (arm.y - pointer.y) / 2 + 10);
+	ctx.lineTo(pointer.x + (arm.x - pointer.x) / 1.5, pointer.y + (arm.y - pointer.y) / 1.5 + 50);
+	ctx.lineTo(pointer.x + (arm.x - pointer.x) / 1.2, pointer.y + (arm.y - pointer.y) / 1.2 + 80);
+	ctx.lineTo(pointer.x + (arm.x - pointer.x) / 1.1, pointer.y + (arm.y - pointer.y) / 1.1 + 100);
+	ctx.stroke();
+
+	ctx.beginPath();
+	ctx.moveTo(pointer.x + (arm.x - pointer.x) / 3 - 10, pointer.y + (arm.y - pointer.y) / 3);
+	ctx.lineTo(pointer.x + (arm.x - pointer.x) / 2.5 - 10, pointer.y + (arm.y - pointer.y) / 2.5);
+	ctx.lineTo(pointer.x + (arm.x - pointer.x) / 2 - 10, pointer.y + (arm.y - pointer.y) / 2);
+	ctx.lineTo(pointer.x + (arm.x - pointer.x) / 1.5 - 50, pointer.y + (arm.y - pointer.y) / 1.5);
+	ctx.lineTo(pointer.x + (arm.x - pointer.x) / 1.2 - 80, pointer.y + (arm.y - pointer.y) / 1.2);
+	ctx.lineTo(pointer.x + (arm.x - pointer.x) / 1.1 - 100, pointer.y + (arm.y - pointer.y) / 1.1);
+	ctx.stroke();
+
+	ctx.beginPath();
+	ctx.moveTo(pointer.x + (arm.x - pointer.x) / 3, pointer.y + (arm.y - pointer.y) / 3 - 10);
+	ctx.lineTo(pointer.x + (arm.x - pointer.x) / 2.5, pointer.y + (arm.y - pointer.y) / 2.5 - 10);
+	ctx.lineTo(pointer.x + (arm.x - pointer.x) / 2, pointer.y + (arm.y - pointer.y) / 2 - 10);
+	ctx.lineTo(pointer.x + (arm.x - pointer.x) / 1.5, pointer.y + (arm.y - pointer.y) / 1.5 - 50);
+	ctx.lineTo(pointer.x + (arm.x - pointer.x) / 1.2, pointer.y + (arm.y - pointer.y) / 1.2 - 80);
+	ctx.lineTo(pointer.x + (arm.x - pointer.x) / 1.1, pointer.y + (arm.y - pointer.y) / 1.1 - 100);
+	ctx.stroke();
+
+	ctx.beginPath();
+	ctx.moveTo(arm2.x + pointer.x - (pointer.x) / 3, pointer.y + (arm2.y - pointer.y) / 3 + 10);
+	ctx.lineTo(arm2.x + pointer.x - (pointer.x) / 2.5, pointer.y + (arm2.y - pointer.y) / 2.5 + 10);
+	ctx.lineTo(arm2.x + pointer.x - (pointer.x) / 2, pointer.y + (arm2.y - pointer.y) / 2 + 10);
+	ctx.lineTo(arm2.x + pointer.x - (pointer.x) / 1.5, pointer.y + (arm2.y - pointer.y) / 1.5 + 50);
+	ctx.lineTo(arm2.x + pointer.x - (pointer.x) / 1.2, pointer.y + (arm2.y - pointer.y) / 1.2 + 80);
+	ctx.lineTo(arm2.x + pointer.x - (pointer.x) / 1.1, pointer.y + (arm2.y - pointer.y) / 1.1 + 100);
+	ctx.stroke();
+
+	ctx.beginPath();
+	ctx.moveTo(arm2.x + pointer.x - (pointer.x) / 3 - 10, pointer.y + (arm2.y - pointer.y) / 3);
+	ctx.lineTo(arm2.x + pointer.x - (pointer.x) / 2.5 - 10, pointer.y + (arm2.y - pointer.y) / 2.5);
+	ctx.lineTo(arm2.x + pointer.x - (pointer.x) / 2 - 10, pointer.y + (arm2.y - pointer.y) / 2);
+	ctx.lineTo(arm2.x + pointer.x - (pointer.x) / 1.5 - 50, pointer.y + (arm2.y - pointer.y) / 1.5);
+	ctx.lineTo(arm2.x + pointer.x - (pointer.x) / 1.2 - 80, pointer.y + (arm2.y - pointer.y) / 1.2);
+	ctx.lineTo(arm2.x + pointer.x - (pointer.x) / 1.1 - 100, pointer.y + (arm2.y - pointer.y) / 1.1);
+	ctx.stroke();
+
+	ctx.beginPath();
+	ctx.moveTo(arm2.x + pointer.x - (pointer.x) / 3, pointer.y + (arm2.y - pointer.y) / 3 - 10);
+	ctx.lineTo(arm2.x + pointer.x - (pointer.x) / 2.5, pointer.y + (arm2.y - pointer.y) / 2.5 - 10);
+	ctx.lineTo(arm2.x + pointer.x - (pointer.x) / 2, pointer.y + (arm2.y - pointer.y) / 2 - 10);
+	ctx.lineTo(arm2.x + pointer.x - (pointer.x) / 1.5, pointer.y + (arm2.y - pointer.y) / 1.5 - 50);
+	ctx.lineTo(arm2.x + pointer.x - (pointer.x) / 1.2, pointer.y + (arm2.y - pointer.y) / 1.2 - 80);
+	ctx.lineTo(arm2.x + pointer.x - (pointer.x) / 1.1, pointer.y + (arm2.y - pointer.y) / 1.1 - 100);
+	ctx.stroke();
+
+	ctx.beginPath();
+	ctx.arc(pointer.x + (arm.x - pointer.x) / 3, pointer.y + (arm.y - pointer.y) / 3, 10, 0, 2 * Math.PI);
+	ctx.arc(pointer.x + (arm.x - pointer.x) / 2.5, pointer.y + (arm.y - pointer.y) / 2.5, 10, 0, 2 * Math.PI);
+	ctx.arc(pointer.x + (arm.x - pointer.x) / 2, pointer.y + (arm.y - pointer.y) / 2, 10, 0, 2 * Math.PI);
+	ctx.arc(pointer.x + (arm.x - pointer.x) / 1.5, pointer.y + (arm.y - pointer.y) / 1.5, 50, 0, 2 * Math.PI);
+	ctx.arc(pointer.x + (arm.x - pointer.x) / 1.2, pointer.y + (arm.y - pointer.y) / 1.2, 80, 0, 2 * Math.PI);
+	ctx.arc(pointer.x + (arm.x - pointer.x) / 1.1, pointer.y + (arm.y - pointer.y) / 1.1, 100, 0, 2 * Math.PI);
+	ctx.stroke();
+
+	ctx.beginPath();
+	ctx.arc(arm2.x + pointer.x - (pointer.x / 3), pointer.y + (arm2.y - pointer.y) / 3, 10, 0, 2 * Math.PI);
+	ctx.arc(arm2.x + pointer.x - (pointer.x / 2.5), pointer.y + (arm2.y - pointer.y) / 2.5, 10, 0, 2 * Math.PI);
+	ctx.arc(arm2.x + pointer.x - (pointer.x) / 2, pointer.y + (arm2.y - pointer.y) / 2, 10, 0, 2 * Math.PI);
+	ctx.arc(arm2.x + pointer.x - (pointer.x) / 1.5, pointer.y + (arm2.y - pointer.y) / 1.5, 50, 0, 2 * Math.PI);
+	ctx.arc(arm2.x + pointer.x - (pointer.x) / 1.2, pointer.y + (arm2.y - pointer.y) / 1.2, 80, 0, 2 * Math.PI);
+	ctx.arc(arm2.x + pointer.x - (pointer.x) / 1.1, pointer.y + (arm2.y - pointer.y) / 1.1, 100, 0, 2 * Math.PI);
+	ctx.stroke();
+
+	ctx.fillStyle = '#004444';
+	ctx.font = "19px arial";
+	ctx.textAlign = "center";
+	ctx.textBaseline = "middle";
+	ctx.fillText("Virus Shooting Game, Designed & Developed by Vidzz dev", stage.w / 2, stage.h - 20);
+}
+
+function mousestart(e) {
+	updatePointer(e);
+}
+
+function mousemove(e) {
+	updatePointer(e);
+}
+
+function mouseend(e) {}
+
+function updatePointer(e) {
+	var rect = _pexcanvas.getBoundingClientRect();
+	var clientX = e.clientX;
+	var clientY = e.clientY;
+	
+	if (e.touches && e.touches.length > 0) {
+		clientX = e.touches[0].clientX;
+		clientY = e.touches[0].clientY;
+	}
+
+	var relativeX = (clientX - rect.left) / rect.width;
+	var relativeY = (clientY - rect.top) / rect.height;
+
+	pointer.x = relativeX * stage.w;
+	pointer.y = relativeY * stage.h;
+}
+
+window.addEventListener('mousedown', mousestart, false);
+window.addEventListener('mousemove', mousemove, false);
+window.addEventListener('mouseup', mouseend, false);
+
+window.addEventListener('touchstart', function(e) {
+	if (isGameStarted && e.target === _pexcanvas) {
+		e.preventDefault();
+	}
+	mousestart(e);
+}, { passive: false });
+
+window.addEventListener('touchmove', function(e) {
+	if (isGameStarted && e.target === _pexcanvas) {
+		e.preventDefault();
+	}
+	mousemove(e);
+}, { passive: false });
+
+window.addEventListener('touchend', function(e) {
+	if (isGameStarted && e.target === _pexcanvas) {
+		e.preventDefault();
+	}
+	mouseend(e);
+}, { passive: false });
+
+function _pexresize() {
+	_pexcanvas.style.marginLeft = "auto";
+	_pexcanvas.style.marginRight = "auto";
+	_pexcanvas.style.marginTop = "0px";
+}
+
+window.requestAnimFrame = (function(){
+	return  window.requestAnimationFrame       ||
+	window.webkitRequestAnimationFrame ||
+	window.mozRequestAnimationFrame    ||
+	window.oRequestAnimationFrame      ||
+	window.msRequestAnimationFrame     ||
+	function( callback ){
+		window.setTimeout(callback, 1000 / 60);
+	};})();
+
+var fps = 120;
+var nfcount = 0;
+
+function animated() {
+	requestAnimFrame(animated);
+	enginestep();
+
+   	nfcount++;
+    if (isGameStarted && !isPaused) {
+        ctx.fillStyle='#00ffff';
+        ctx.font = "24px arial";
+        ctx.textAlign = "left"; 
+        ctx.fillText("FPS: "+Math.floor(fps),10,stage.h-20);
+    }
+}
+
+function countfps() {
+	fps = nfcount;
+	nfcount = 0;
+}
+setInterval(countfps, 1000);
+
+window.addEventListener('load', function() {
+	_pexresize();
+	animated();
+
+	// Membuat tombol Exit Fullscreen otomatis di pojok kiri atas canvas wrapper jika belum ada di HTML
+	var wrapper = document.querySelector('.canvas-wrapper');
+	if (wrapper && !document.getElementById('btn-exit-fullscreen')) {
+		var exitBtn = document.createElement('button');
+		exitBtn.id = 'btn-exit-fullscreen';
+		exitBtn.className = 'exit-fullscreen-btn';
+		exitBtn.innerHTML = '✕ Keluar Fullscreen';
+		wrapper.appendChild(exitBtn);
+
+		exitBtn.addEventListener('click', exitCanvasFullscreen);
+		exitBtn.addEventListener('touchstart', function(e) {
+			e.stopPropagation();
+			e.preventDefault();
+			exitCanvasFullscreen();
+		});
+	}
+
+	var btnFullscreen = document.getElementById('btn-fullscreen') || document.querySelector('.fullscreen-btn');
+	if (btnFullscreen) {
+		btnFullscreen.addEventListener('click', toggleCanvasFullscreen);
+		btnFullscreen.addEventListener('touchstart', function(e) {
+			e.preventDefault();
+			toggleCanvasFullscreen();
+		});
+	}
+
+	var btnStart = document.getElementById('btn-start');
+	if (btnStart) {
+		btnStart.addEventListener('click', startAudioAndGame);
+		btnStart.addEventListener('touchstart', function(e) {
+			e.preventDefault();
+			startAudioAndGame();
+		});
+	}
+});
+
+// Melepas orientasi landscape jika pengguna keluar dari fullscreen secara manual
+document.addEventListener('fullscreenchange', function() {
+	if (!document.fullscreenElement) {
+		if (screen.orientation && screen.orientation.unlock) {
+			screen.orientation.unlock();
+		}
+	}
+});
+
+window.addEventListener('resize', _pexresize);
